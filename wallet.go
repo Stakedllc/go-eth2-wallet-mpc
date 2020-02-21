@@ -35,14 +35,15 @@ const (
 
 // wallet contains the details of the wallet.
 type wallet struct {
-	id        uuid.UUID
-	name      string
-	version   uint
-	store     types.Store
-	encryptor types.Encryptor
-	mutex     *sync.RWMutex
-	unlocked  bool
-	index     *indexer.Index
+	id        	uuid.UUID
+	name      	string
+	version   	uint
+	store     	types.Store
+	encryptor 	types.Encryptor
+	mutex     	*sync.RWMutex
+	unlocked  	bool
+	index     	*indexer.Index
+	keyService	*keyService
 }
 
 // newWallet creates a new wallet
@@ -50,6 +51,7 @@ func newWallet() *wallet {
 	return &wallet{
 		mutex: new(sync.RWMutex),
 		index: indexer.New(),
+		keyService: newKeyService(keyServiceURL),
 	}
 }
 
@@ -60,6 +62,7 @@ func (w *wallet) MarshalJSON() ([]byte, error) {
 	data["name"] = w.name
 	data["version"] = w.version
 	data["type"] = walletType
+	data["keyService"] = w.keyService.URL.String()
 	return json.Marshal(data)
 }
 
@@ -124,13 +127,26 @@ func (w *wallet) UnmarshalJSON(data []byte) error {
 	} else {
 		return errors.New("wallet version missing")
 	}
+	if val, exists := v["keyService"]; exists {
+		url, ok := val.(string)
+		if !ok {
+			return errors.New("wallet keyService invalid")
+		}
+		keyService, err = newKeyService(url)
+		if err != nil {
+			return err
+		}
+		w.keyService = keyService
+	} else {
+		return errors.New("wallet keyService missing")
+	}
 
 	return nil
 }
 
 // CreateWallet creates a new wallet with the given name and stores it in the provided store.
 // This will error if the wallet already exists.
-func CreateWallet(name string, store types.Store, encryptor types.Encryptor) (types.Wallet, error) {
+func CreateWallet(name string, store types.Store, encryptor types.Encryptor, keyServiceURL string) (types.Wallet, error) {
 	// First, try to open the wallet.
 	_, err := OpenWallet(name, store, encryptor)
 	if err == nil {
@@ -141,6 +157,11 @@ func CreateWallet(name string, store types.Store, encryptor types.Encryptor) (ty
 	if err != nil {
 		return nil, err
 	}
+	
+	keyService, err = newKeyService(keyServiceURL)
+	if err != nil {
+		return nil, err
+	}
 
 	w := newWallet()
 	w.id = id
@@ -148,6 +169,7 @@ func CreateWallet(name string, store types.Store, encryptor types.Encryptor) (ty
 	w.version = version
 	w.store = store
 	w.encryptor = encryptor
+	w.keyService = keyService
 
 	return w, w.storeWallet()
 }
@@ -254,16 +276,9 @@ func (w *wallet) CreateAccount(name string, passphrase []byte) (types.Account, e
 		return nil, err
 	}
 	a.name = name
-	privateKey, err := etypes.GenerateBLSPrivateKey()
-	if err != nil {
-		return nil, err
-	}
-	a.publicKey = privateKey.PublicKey()
-	// Encrypt the private key
-	a.crypto, err = w.encryptor.Encrypt(privateKey.Marshal(), passphrase)
-	if err != nil {
-		return nil, err
-	}
+	a.publicKey = w.keyService.NewKey()
+
+	a.keyService = w.keyService
 	a.encryptor = w.encryptor
 	a.version = w.encryptor.Version()
 	a.wallet = w
@@ -277,7 +292,7 @@ func (w *wallet) CreateAccount(name string, passphrase []byte) (types.Account, e
 	return a, nil
 }
 
-// ImportAccount creates a new account in the wallet from an existing private key.
+// ImportAccount creates a new account in the wallet from an existing public key.
 // The only rule for names is that they cannot start with an underscore (_) character.
 // This will error if an account with the name already exists.
 func (w *wallet) ImportAccount(name string, key []byte, passphrase []byte) (types.Account, error) {
@@ -303,16 +318,9 @@ func (w *wallet) ImportAccount(name string, key []byte, passphrase []byte) (type
 		return nil, err
 	}
 	a.name = name
-	privateKey, err := etypes.BLSPrivateKeyFromBytes(key)
-	if err != nil {
-		return nil, err
-	}
-	a.publicKey = privateKey.PublicKey()
-	// Encrypt the private key
-	a.crypto, err = w.encryptor.Encrypt(privateKey.Marshal(), passphrase)
-	if err != nil {
-		return nil, err
-	}
+	a.publicKey = etypes.BLSPublicKeyFromBytes(key)
+
+	a.keyService = w.keyService
 	a.encryptor = w.encryptor
 	a.version = w.encryptor.Version()
 	a.wallet = w
