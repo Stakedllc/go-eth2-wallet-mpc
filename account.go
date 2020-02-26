@@ -15,10 +15,10 @@
 package mpc
 
 import (
-	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sync"
 
 	"github.com/google/uuid"
@@ -30,15 +30,15 @@ import (
 
 // account contains the details of the account.
 type account struct {
-	id        	uuid.UUID
-	name      	string
-	publicKey 	etypes.PublicKey
-	version   	uint
-	wallet    	types.Wallet
-	encryptor 	types.Encryptor
-	mutex     	*sync.RWMutex
-	unlocked  	bool
-	keyService	*keyService
+	id         uuid.UUID
+	name       string
+	publicKey  etypes.PublicKey
+	version    uint
+	wallet     types.Wallet
+	encryptor  types.Encryptor
+	mutex      *sync.RWMutex
+	unlocked   bool
+	keyService *keyService
 }
 
 // newAccount creates a new account
@@ -132,11 +132,15 @@ func (a *account) UnmarshalJSON(data []byte) error {
 		return errors.New("unsupported keystore version")
 	}
 	if val, exists := v["keyService"]; exists {
-		url, ok := val.(string)
+		urlStr, ok := val.(string)
 		if !ok {
 			return errors.New("account keyService invalid")
 		}
-		keyService, err = newKeyService(url)
+		url, err := url.Parse(urlStr)
+		if err != nil {
+			return err
+		}
+		keyService, err := newKeyService(url)
 		if err != nil {
 			return err
 		}
@@ -167,7 +171,7 @@ func (a *account) PublicKey() etypes.PublicKey {
 
 // PrivateKey returns nil as MPC accounts don't have a privateKey
 func (a *account) PrivateKey() (etypes.PrivateKey, error) {
-	return nil
+	return nil, nil
 }
 
 // Lock locks the account.  A locked account cannot sign data.
@@ -206,7 +210,12 @@ func (a *account) Sign(data []byte, domain uint64) (etypes.Signature, error) {
 		return nil, errors.New("cannot sign when account is locked")
 	}
 
-	return a.keyService.Sign(a.publicKey, data)
+	signature, err := a.keyService.Sign(a.PublicKey(), data, domain)
+	if err != nil {
+		return nil, err
+	}
+
+	return signature, nil
 }
 
 // storeAccount stores the accout.

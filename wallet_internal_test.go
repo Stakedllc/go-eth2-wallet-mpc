@@ -109,7 +109,7 @@ func TestUnmarshalWallet(t *testing.T) {
 		},
 		{
 			name:       "Good",
-			input:      []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"Good","type":"multi-party","version":1}`),
+			input:      []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"Good","type":"multi-party","keyService":"http://localhost:8080","version":1}`),
 			walletType: "multi-party",
 			id:         uuid.MustParse("c9958061-63d4-4a80-bcf3-25f3dda22340"),
 			version:    1,

@@ -15,20 +15,34 @@
 package mpc_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	mpc "github.com/Stakedllc/go-eth2-wallet-mpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
-	mpc "github.com/Stakedllc/go-eth2-wallet-mpc"
 	scratch "github.com/wealdtech/go-eth2-wallet-store-scratch"
 	types "github.com/wealdtech/go-eth2-wallet-types"
 )
 
 func TestExportWallet(t *testing.T) {
+	// Start a local HTTP server
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		// Test request METHOD
+		assert.Equal(t, req.Method, "GET")
+		// Test request parameters
+		assert.Equal(t, req.URL.String(), "/address")
+		// Send response to be tested
+		rw.Write([]byte(`{"PubKey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"}`))
+	}))
+	// Close the server when test finishes
+	defer server.Close()
+
 	store := scratch.New()
 	encryptor := keystorev4.New()
-	wallet, err := mpc.CreateWallet("test wallet", store, encryptor)
+	wallet, err := mpc.CreateWallet("test wallet", store, encryptor, server.URL)
 	require.Nil(t, err)
 	err = wallet.Unlock([]byte{})
 	require.Nil(t, err)

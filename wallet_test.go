@@ -26,13 +26,13 @@ import (
 func TestCreateWallet(t *testing.T) {
 	store := scratch.New()
 	encryptor := keystorev4.New()
-	wallet, err := mpc.CreateWallet("test wallet", store, encryptor)
+	wallet, err := mpc.CreateWallet("test wallet", store, encryptor, "http://localhost:8080")
 	assert.Nil(t, err)
 
 	assert.Equal(t, "test wallet", wallet.Name())
 	assert.Equal(t, uint(1), wallet.Version())
 
 	// Try to create another wallet with the same name; should error
-	_, err = mpc.CreateWallet("test wallet", store, encryptor)
+	_, err = mpc.CreateWallet("test wallet", store, encryptor, "http://localhost:8080")
 	assert.NotNil(t, err)
 }

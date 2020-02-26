@@ -14,59 +14,65 @@
 package mpc
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
-	"path"
 
 	etypes "github.com/wealdtech/go-eth2-types"
 )
 
 type keyService struct {
-	URL			url.URL
+	URL *url.URL
 }
 
 type newKeyResponse struct {
-	PubKey		[48]byte `json:"pubKey"`
+	PubKey string `json:"pubKey"`
 }
 
 type signRequest struct {
-	Payload 	[]byte `json:"payload"`
+	Payload string `json:"payload"`
+	Domain  uint64 `json:"domain"`
 }
 
 type signResponse struct {
-	Signature 	string `json:"signature"`
+	Signature string `json:"sign"`
 }
 
 // newKeyService creates a new keyService
-func newKeyService(raw string) (*keyService, error) {
-	url, err = url.Parse(raw)
-	if err != nil {
-		return nil, err
+func newKeyService(url *url.URL) (*keyService, error) {
+	if !url.IsAbs() {
+		return nil, fmt.Errorf("keyService URL %s is not absolute", url)
 	}
 
-	service := &keyService{
+	return &keyService{
 		URL: url,
-	}
-
-	return service, nil
+	}, nil
 }
 
 func (ks *keyService) NewKey() (etypes.PublicKey, error) {
-	path, err := url.Parse("")
+	endpoint := "/address"
+	url, err := ks.URL.Parse(endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err = http.Get(ks.URL.ResolveReference(path).String())
+	resp, err := http.Get(url.String())
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
 	var v newKeyResponse
-	if err := json.Unmarshal(resp, &v); err != nil {
+	if err := json.Unmarshal(body, &v); err != nil {
 		return nil, err
 	}
 
@@ -74,7 +80,7 @@ func (ks *keyService) NewKey() (etypes.PublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err = etypes.BLSPublicKeyFromBytes(bytes)
+	key, err := etypes.BLSPublicKeyFromBytes(bytes)
 	if err != nil {
 		return nil, err
 	}
@@ -82,28 +88,36 @@ func (ks *keyService) NewKey() (etypes.PublicKey, error) {
 	return key, nil
 }
 
-func (ks *keyService) Sign(key etypes.PublicKey, payload []byte) ([]byte, error) {
+func (ks *keyService) Sign(key etypes.PublicKey, payload []byte, domain uint64) (etypes.Signature, error) {
 	r := &signRequest{
-		Payload: payload
+		Payload: fmt.Sprintf("%s", payload),
+		Domain:  domain,
 	}
 
 	data, err := json.Marshal(r)
-    if err != nil {
-        return nil, err
-	}
-
-	path, err := url.Parse(key)
 	if err != nil {
 		return nil, err
 	}
-	
-	resp, err := http.Post(ks.URL.ResolveReference(path).String(), "application/json", data)
+
+	endpoint := fmt.Sprintf("address/%x/sign", key.Marshal())
+	url, err := ks.URL.Parse(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Post(url.String(), "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
 	var v signResponse
-	if err := json.Unmarshal(resp, &v); err != nil {
+	if err := json.Unmarshal(body, &v); err != nil {
 		return nil, err
 	}
 
@@ -112,5 +126,10 @@ func (ks *keyService) Sign(key etypes.PublicKey, payload []byte) ([]byte, error)
 		return nil, err
 	}
 
-	return bytes, nil
+	signature, err := etypes.BLSSignatureFromBytes(bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return signature, nil
 }

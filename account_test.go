@@ -16,13 +16,15 @@ package mpc_test
 
 import (
 	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	mpc "github.com/Stakedllc/go-eth2-wallet-mpc"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
-	mpc "github.com/Stakedllc/go-eth2-wallet-mpc"
 	scratch "github.com/wealdtech/go-eth2-wallet-store-scratch"
 	types "github.com/wealdtech/go-eth2-wallet-types"
 )
@@ -34,6 +36,18 @@ func _byteArray(input string) []byte {
 }
 
 func TestCreateAccount(t *testing.T) {
+	// Start a local HTTP server
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		// Test request METHOD
+		assert.Equal(t, req.Method, "GET")
+		// Test request parameters
+		assert.Equal(t, req.URL.String(), "/address")
+		// Send response to be tested
+		rw.Write([]byte(`{"PubKey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"}`))
+	}))
+	// Close the server when test finishes
+	defer server.Close()
+
 	tests := []struct {
 		name        string
 		accountName string
@@ -63,7 +77,7 @@ func TestCreateAccount(t *testing.T) {
 
 	store := scratch.New()
 	encryptor := keystorev4.New()
-	wallet, err := mpc.CreateWallet("test wallet", store, encryptor)
+	wallet, err := mpc.CreateWallet("test wallet", store, encryptor, server.URL)
 	require.Nil(t, err)
 
 	// Try to create without unlocking the wallet; should fail
@@ -111,7 +125,7 @@ func TestImportAccount(t *testing.T) {
 		},
 		{
 			name:        "Good",
-			key:         _byteArray("220091d10843519cd1c452a4ec721d378d7d4c5ece81c4b5556092d410e5e0e1"),
+			key:         _byteArray("a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"),
 			accountName: "test",
 		},
 		{
@@ -123,11 +137,11 @@ func TestImportAccount(t *testing.T) {
 
 	store := scratch.New()
 	encryptor := keystorev4.New()
-	wallet, err := mpc.CreateWallet("test wallet", store, encryptor)
+	wallet, err := mpc.CreateWallet("test wallet", store, encryptor, "http://localhost:8080")
 	require.Nil(t, err)
 
 	// Try to import without unlocking the wallet; should fail
-	_, err = wallet.(types.WalletAccountImporter).ImportAccount("attempt", _byteArray("220091d10843519cd1c452a4ec721d378d7d4c5ece81c4b5556092d410e5e0e1"), []byte("test"))
+	_, err = wallet.(types.WalletAccountImporter).ImportAccount("attempt", _byteArray("a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"), []byte("test"))
 	assert.NotNil(t, err)
 
 	err = wallet.Unlock(nil)
@@ -143,13 +157,6 @@ func TestImportAccount(t *testing.T) {
 				require.Nil(t, err)
 				assert.Equal(t, test.accountName, account.Name())
 				assert.Equal(t, "", account.Path())
-				// Should not be able to obtain private key from a locked account
-				_, err = account.(types.AccountPrivateKeyProvider).PrivateKey()
-				assert.NotNil(t, err)
-				err = account.Unlock(test.passphrase)
-				require.Nil(t, err)
-				_, err := account.(types.AccountPrivateKeyProvider).PrivateKey()
-				assert.Nil(t, err)
 			}
 		})
 	}

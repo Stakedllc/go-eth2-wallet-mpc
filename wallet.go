@@ -17,6 +17,7 @@ package mpc
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -51,7 +52,6 @@ func newWallet() *wallet {
 	return &wallet{
 		mutex: new(sync.RWMutex),
 		index: indexer.New(),
-		keyService: newKeyService(keyServiceURL),
 	}
 }
 
@@ -128,11 +128,15 @@ func (w *wallet) UnmarshalJSON(data []byte) error {
 		return errors.New("wallet version missing")
 	}
 	if val, exists := v["keyService"]; exists {
-		url, ok := val.(string)
+		urlStr, ok := val.(string)
 		if !ok {
 			return errors.New("wallet keyService invalid")
 		}
-		keyService, err = newKeyService(url)
+		url, err := url.Parse(urlStr)
+		if err != nil {
+			return err
+		}
+		keyService, err := newKeyService(url)
 		if err != nil {
 			return err
 		}
@@ -157,8 +161,11 @@ func CreateWallet(name string, store types.Store, encryptor types.Encryptor, key
 	if err != nil {
 		return nil, err
 	}
-	
-	keyService, err = newKeyService(keyServiceURL)
+	url, err := url.Parse(keyServiceURL)
+	if err != nil {
+		return nil, err
+	}
+	keyService, err := newKeyService(url)
 	if err != nil {
 		return nil, err
 	}
@@ -276,8 +283,12 @@ func (w *wallet) CreateAccount(name string, passphrase []byte) (types.Account, e
 		return nil, err
 	}
 	a.name = name
-	a.publicKey = w.keyService.NewKey()
+	publicKey, err := w.keyService.NewKey()
+	if err != nil {
+		return nil, err
+	}
 
+	a.publicKey = publicKey
 	a.keyService = w.keyService
 	a.encryptor = w.encryptor
 	a.version = w.encryptor.Version()
@@ -318,8 +329,12 @@ func (w *wallet) ImportAccount(name string, key []byte, passphrase []byte) (type
 		return nil, err
 	}
 	a.name = name
-	a.publicKey = etypes.BLSPublicKeyFromBytes(key)
+	publicKey, err := etypes.BLSPublicKeyFromBytes(key)
+	if err != nil {
+		return nil, err
+	}
 
+	a.publicKey = publicKey
 	a.keyService = w.keyService
 	a.encryptor = w.encryptor
 	a.version = w.encryptor.Version()
