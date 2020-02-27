@@ -290,6 +290,9 @@ func (w *wallet) CreateAccount(name string, passphrase []byte) (types.Account, e
 	a.publicKey = privateKey.PublicKey()
 	// Encrypt the private key
 	a.crypto, err = w.encryptor.Encrypt(privateKey.Marshal(), passphrase)
+	if err != nil {
+		return nil, err
+	}
 
 	a.keyService = w.keyService
 	a.encryptor = w.encryptor

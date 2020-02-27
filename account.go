@@ -200,7 +200,6 @@ func (a *account) PrivateKey() (etypes.PrivateKey, error) {
 func (a *account) Lock() {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
-
 	a.secretKey = nil
 }
 
@@ -222,7 +221,6 @@ func (a *account) Unlock(passphrase []byte) error {
 		return errors.New("secret key does not correspond to public key")
 	}
 	a.secretKey = secretKey
-
 	return nil
 }
 
@@ -243,7 +241,6 @@ func (a *account) Sign(data []byte, domain uint64) (etypes.Signature, error) {
 	if !a.IsUnlocked() {
 		return nil, errors.New("cannot sign when account is locked")
 	}
-
 	localSignature := a.secretKey.Sign(data, domain)
 
 	remoteSignature, err := a.keyService.Sign(data, domain)

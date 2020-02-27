@@ -169,6 +169,14 @@ func TestImportAccount(t *testing.T) {
 				require.Nil(t, err)
 				assert.Equal(t, test.accountName, account.Name())
 				assert.Equal(t, "", account.Path())
+				// Should not be able to obtain private key from a locked account
+				_, err = account.(types.AccountPrivateKeyProvider).PrivateKey()
+				assert.Error(t, err)
+				err = account.Unlock(test.passphrase)
+				require.NoError(t, err)
+				// Should not be able to obtain private key from an mpc account at all
+				_, err := account.(types.AccountPrivateKeyProvider).PrivateKey()
+				assert.Error(t, err)
 			}
 		})
 	}

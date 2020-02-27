@@ -172,7 +172,7 @@ func TestUnmarshalAccount(t *testing.T) {
 			} else {
 				require.Nil(t, err)
 				assert.Equal(t, test.id, output.ID())
-				// assert.Equal(t, test.publicKey, output.PublicKey().Marshal())
+				assert.Equal(t, test.publicKey, output.publicKey.Marshal())
 				//				assert.Equal(t, test.version, output.Version())
 				//				assert.Equal(t, test.walletType, output.Type())
 			}
