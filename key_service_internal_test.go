@@ -14,8 +14,9 @@
 package mpc
 
 import (
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,7 +25,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	etypes "github.com/wealdtech/go-eth2-types"
 )
 
 func TestNewKeyService(t *testing.T) {
@@ -55,76 +55,102 @@ func TestNewKeyService(t *testing.T) {
 
 			output, err := newKeyService(url)
 			if test.err != nil {
-				require.NotNil(t, err)
+				require.Error(t, err)
 				assert.Equal(t, test.err.Error(), err.Error())
 			} else {
-				require.Nil(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, url.String(), output.URL.String())
 			}
 		})
 	}
 }
 
-func TestNewKey(t *testing.T) {
+func TestPublicKey(t *testing.T) {
 	pubKeyStr := "a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"
 
 	// Start a local HTTP server
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		// Test request METHOD
-		assert.Equal(t, req.Method, "GET")
+		assert.Equal(t, "GET", req.Method)
 		// Test request parameters
-		assert.Equal(t, req.URL.String(), "/address")
+		assert.Equal(t, "/", req.URL.String())
 		// Send response to be tested
-		rw.Write([]byte(fmt.Sprintf(`{"PubKey":"%s"}`, pubKeyStr)))
+		rw.Write([]byte(fmt.Sprintf(`{"pk":"%s"}`, pubKeyStr)))
 	}))
 	// Close the server when test finishes
 	defer server.Close()
 
 	url, err := url.Parse(server.URL)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	ks, err := newKeyService(url)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
-	output, err := ks.NewKey()
-	assert.Nil(t, err)
+	output, err := ks.PublicKey()
+	assert.NoError(t, err)
 
 	assert.Equal(t, fmt.Sprintf("%x", output.Marshal()), pubKeyStr)
 }
 
 func TestSign(t *testing.T) {
 	payload := []byte("abcd")
-	pubKeyStr := "a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"
 	signatureStr := "b27173efced932d1e0decdbb872512d4d123835629ffd907211ffe74a86a05dc6be4a8c15f886a48daed4a975f5fffe9153297bcda99adf84b351a8d514ea7f0607ff2e678c1600381fa6beb5fbe1a864924a3e69bb938caeef2de673988265e"
 
 	// Start a local HTTP server
-	// server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-	// 	// Test request METHOD
-	// 	assert.Equal(t, req.Method, "GET")
-	// 	// Test request parameters
-	// 	assert.Equal(t, req.URL.String(), "/address")
-	// 	// Send response to be tested
-	// 	rw.Write([]byte(fmt.Sprintf(`{"PubKey":"%s"}`, pubKeyStr)))
-	// }))
-	// // Close the server when test finishes
-	// defer server.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		// Test request METHOD
+		assert.Equal(t, "POST", req.Method)
 
-	bytes, err := hex.DecodeString(pubKeyStr)
-	require.Nil(t, err)
+		// Test request parameters
+		assert.Equal(t, "/sign/", req.URL.String())
 
-	pubKey, err := etypes.BLSPublicKeyFromBytes(bytes)
-	require.Nil(t, err)
+		// Test request payload
+		defer req.Body.Close()
+
+		body, err := ioutil.ReadAll(req.Body)
+		assert.NoError(t, err)
+
+		fmt.Println(body)
+
+		var data signRequest
+		err = json.Unmarshal(body, &data)
+		assert.NoError(t, err)
+
+		fmt.Println(data)
+
+		test, err := json.MarshalIndent(data, "", "  ")
+		assert.NoError(t, err)
+
+		fmt.Println(test)
+
+		// Send response to be tested
+		rw.Write([]byte(fmt.Sprintf(`{"Signature":"%s"}`, signatureStr)))
+	}))
+	// Close the server when test finishes
+	defer server.Close()
+
+	// bytes, err := hex.DecodeString(pubKeyStr)
+	// require.NoError(t, err)
+
+	// pubKey, err := etypes.BLSPublicKeyFromBytes(bytes)
+	// require.NoError(t, err)
 
 	// url, err := url.Parse(server.URL)
 	url, err := url.Parse("http://driver:8000")
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	ks, err := newKeyService(url)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
-	output, err := ks.Sign(pubKey, payload, uint64(42))
-	assert.Nil(t, err)
+	pubKey, err := ks.PublicKey()
+	require.NoError(t, err)
 
-	assert.Equal(t, signatureStr, fmt.Sprintf("%x", output.Marshal()))
-	assert.Equal(t, true, output.Verify(payload, pubKey, uint64(42)))
+	output, err := ks.Sign(payload, 0)
+	require.NoError(t, err)
+
+	fmt.Println(pubKey.Marshal())
+	fmt.Println(output.Marshal())
+
+	// assert.Equal(t, signatureStr, fmt.Sprintf("%x", output.Marshal()))
+	assert.Equal(t, true, output.Verify(payload, pubKey, 0))
 }

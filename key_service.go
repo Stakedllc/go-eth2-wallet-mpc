@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/pkg/errors"
 	etypes "github.com/wealdtech/go-eth2-types"
 )
 
@@ -29,8 +30,8 @@ type keyService struct {
 	URL *url.URL
 }
 
-type newKeyResponse struct {
-	PubKey string `json:"pubKey"`
+type publicKeyResponse struct {
+	PubKey string `json:"pk"`
 }
 
 type signRequest struct {
@@ -45,7 +46,7 @@ type signResponse struct {
 // newKeyService creates a new keyService
 func newKeyService(url *url.URL) (*keyService, error) {
 	if !url.IsAbs() {
-		return nil, fmt.Errorf("keyService URL %s is not absolute", url)
+		return nil, fmt.Errorf("keyService URL '%s' is not absolute", url)
 	}
 
 	return &keyService{
@@ -53,12 +54,8 @@ func newKeyService(url *url.URL) (*keyService, error) {
 	}, nil
 }
 
-func (ks *keyService) NewKey() (etypes.PublicKey, error) {
-	endpoint := "/address"
-	url, err := ks.URL.Parse(endpoint)
-	if err != nil {
-		return nil, err
-	}
+func (ks *keyService) PublicKey() (etypes.PublicKey, error) {
+	url := ks.URL
 
 	resp, err := http.Get(url.String())
 	if err != nil {
@@ -71,15 +68,20 @@ func (ks *keyService) NewKey() (etypes.PublicKey, error) {
 		return nil, err
 	}
 
-	var v newKeyResponse
+	var v publicKeyResponse
 	if err := json.Unmarshal(body, &v); err != nil {
 		return nil, err
+	}
+
+	if v.PubKey == "" {
+		return nil, errors.New("missing public key")
 	}
 
 	bytes, err := hex.DecodeString(v.PubKey)
 	if err != nil {
 		return nil, err
 	}
+
 	key, err := etypes.BLSPublicKeyFromBytes(bytes)
 	if err != nil {
 		return nil, err
@@ -88,7 +90,7 @@ func (ks *keyService) NewKey() (etypes.PublicKey, error) {
 	return key, nil
 }
 
-func (ks *keyService) Sign(key etypes.PublicKey, payload []byte, domain uint64) (etypes.Signature, error) {
+func (ks *keyService) Sign(payload []byte, domain uint64) (etypes.Signature, error) {
 	r := &signRequest{
 		Payload: fmt.Sprintf("%s", payload),
 		Domain:  domain,
@@ -99,7 +101,7 @@ func (ks *keyService) Sign(key etypes.PublicKey, payload []byte, domain uint64) 
 		return nil, err
 	}
 
-	endpoint := fmt.Sprintf("address/%x/sign", key.Marshal())
+	endpoint := "sign"
 	url, err := ks.URL.Parse(endpoint)
 	if err != nil {
 		return nil, err
@@ -119,6 +121,10 @@ func (ks *keyService) Sign(key etypes.PublicKey, payload []byte, domain uint64) 
 	var v signResponse
 	if err := json.Unmarshal(body, &v); err != nil {
 		return nil, err
+	}
+
+	if v.Signature == "" {
+		return nil, errors.New("missing signature")
 	}
 
 	bytes, err := hex.DecodeString(v.Signature)

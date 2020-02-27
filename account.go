@@ -15,6 +15,7 @@
 package mpc
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -33,6 +34,8 @@ type account struct {
 	id         uuid.UUID
 	name       string
 	publicKey  etypes.PublicKey
+	crypto     map[string]interface{}
+	secretKey  etypes.PrivateKey
 	version    uint
 	wallet     types.Wallet
 	encryptor  types.Encryptor
@@ -54,6 +57,8 @@ func (a *account) MarshalJSON() ([]byte, error) {
 	data["uuid"] = a.id.String()
 	data["name"] = a.name
 	data["pubkey"] = fmt.Sprintf("%x", a.publicKey.Marshal())
+	data["crypto"] = a.crypto
+	data["encryptor"] = a.encryptor.Name()
 	data["version"] = a.version
 	data["keyService"] = a.keyService.URL.String()
 	return json.Marshal(data)
@@ -116,6 +121,15 @@ func (a *account) UnmarshalJSON(data []byte) error {
 	} else {
 		return errors.New("account pubkey missing")
 	}
+	if val, exists := v["crypto"]; exists {
+		crypto, ok := val.(map[string]interface{})
+		if !ok {
+			return errors.New("account crypto invalid")
+		}
+		a.crypto = crypto
+	} else {
+		return errors.New("account crypto missing")
+	}
 	if val, exists := v["version"]; exists {
 		version, ok := val.(float64)
 		if !ok {
@@ -165,13 +179,21 @@ func (a *account) Name() string {
 // PublicKey provides the public key for the account.
 func (a *account) PublicKey() etypes.PublicKey {
 	// Safe to ignore the error as this is already a public key
-	keyCopy, _ := etypes.BLSPublicKeyFromBytes(a.publicKey.Marshal())
-	return keyCopy
+	localKeyCopy, _ := etypes.BLSPublicKeyFromBytes(a.publicKey.Marshal())
+
+	remoteKey, err := a.keyService.PublicKey()
+	if err != nil {
+		return nil
+	}
+
+	remoteKeyCopy, _ := etypes.BLSPublicKeyFromBytes(remoteKey.Marshal())
+
+	return localKeyCopy.Aggregate(remoteKeyCopy)
 }
 
-// PrivateKey returns nil as MPC accounts don't have a privateKey
+// PrivateKey returns nil as MPC accounts don't have a private key corresponding to its public key
 func (a *account) PrivateKey() (etypes.PrivateKey, error) {
-	return nil, nil
+	return nil, errors.New("cannot provide private key for mpc account")
 }
 
 // Lock locks the account.  A locked account cannot sign data.
@@ -179,7 +201,7 @@ func (a *account) Lock() {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	a.unlocked = false
+	a.secretKey = nil
 }
 
 // Unlock unlocks the account.  An unlocked account can sign data.
@@ -187,14 +209,26 @@ func (a *account) Unlock(passphrase []byte) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	a.unlocked = true
+	secretBytes, err := a.encryptor.Decrypt(a.crypto, passphrase)
+	if err != nil {
+		return errors.New("incorrect passphrase")
+	}
+	secretKey, err := etypes.BLSPrivateKeyFromBytes(secretBytes)
+	if err != nil {
+		return err
+	}
+	publicKey := secretKey.PublicKey()
+	if !bytes.Equal(publicKey.Marshal(), a.publicKey.Marshal()) {
+		return errors.New("secret key does not correspond to public key")
+	}
+	a.secretKey = secretKey
 
 	return nil
 }
 
 // IsUnlocked returns true if the account is unlocked.
 func (a *account) IsUnlocked() bool {
-	return a.unlocked
+	return a.secretKey != nil
 }
 
 // Path returns "" as multi-party accounts are not derived.
@@ -210,12 +244,14 @@ func (a *account) Sign(data []byte, domain uint64) (etypes.Signature, error) {
 		return nil, errors.New("cannot sign when account is locked")
 	}
 
-	signature, err := a.keyService.Sign(a.PublicKey(), data, domain)
+	localSignature := a.secretKey.Sign(data, domain)
+
+	remoteSignature, err := a.keyService.Sign(data, domain)
 	if err != nil {
 		return nil, err
 	}
 
-	return signature, nil
+	return etypes.AggregateSignatures([]etypes.Signature{localSignature, remoteSignature}), nil
 }
 
 // storeAccount stores the accout.

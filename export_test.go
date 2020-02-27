@@ -31,11 +31,11 @@ func TestExportWallet(t *testing.T) {
 	// Start a local HTTP server
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		// Test request METHOD
-		assert.Equal(t, req.Method, "GET")
+		assert.Equal(t, req.Method, "POST")
 		// Test request parameters
-		assert.Equal(t, req.URL.String(), "/address")
+		assert.Equal(t, req.URL.String(), "/keys/")
 		// Send response to be tested
-		rw.Write([]byte(`{"PubKey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"}`))
+		rw.Write([]byte(`{"pk":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"}`))
 	}))
 	// Close the server when test finishes
 	defer server.Close()

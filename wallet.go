@@ -36,15 +36,15 @@ const (
 
 // wallet contains the details of the wallet.
 type wallet struct {
-	id        	uuid.UUID
-	name      	string
-	version   	uint
-	store     	types.Store
-	encryptor 	types.Encryptor
-	mutex     	*sync.RWMutex
-	unlocked  	bool
-	index     	*indexer.Index
-	keyService	*keyService
+	id         uuid.UUID
+	name       string
+	version    uint
+	store      types.Store
+	encryptor  types.Encryptor
+	mutex      *sync.RWMutex
+	unlocked   bool
+	index      *indexer.Index
+	keyService *keyService
 }
 
 // newWallet creates a new wallet
@@ -283,12 +283,14 @@ func (w *wallet) CreateAccount(name string, passphrase []byte) (types.Account, e
 		return nil, err
 	}
 	a.name = name
-	publicKey, err := w.keyService.NewKey()
+	privateKey, err := etypes.GenerateBLSPrivateKey()
 	if err != nil {
 		return nil, err
 	}
+	a.publicKey = privateKey.PublicKey()
+	// Encrypt the private key
+	a.crypto, err = w.encryptor.Encrypt(privateKey.Marshal(), passphrase)
 
-	a.publicKey = publicKey
 	a.keyService = w.keyService
 	a.encryptor = w.encryptor
 	a.version = w.encryptor.Version()
@@ -303,7 +305,7 @@ func (w *wallet) CreateAccount(name string, passphrase []byte) (types.Account, e
 	return a, nil
 }
 
-// ImportAccount creates a new account in the wallet from an existing public key.
+// ImportAccount creates a new account in the wallet from an existing private key.
 // The only rule for names is that they cannot start with an underscore (_) character.
 // This will error if an account with the name already exists.
 func (w *wallet) ImportAccount(name string, key []byte, passphrase []byte) (types.Account, error) {
@@ -329,12 +331,14 @@ func (w *wallet) ImportAccount(name string, key []byte, passphrase []byte) (type
 		return nil, err
 	}
 	a.name = name
-	publicKey, err := etypes.BLSPublicKeyFromBytes(key)
+	privateKey, err := etypes.BLSPrivateKeyFromBytes(key)
 	if err != nil {
 		return nil, err
 	}
+	a.publicKey = privateKey.PublicKey()
+	// Encrypt the private key
+	a.crypto, err = w.encryptor.Encrypt(privateKey.Marshal(), passphrase)
 
-	a.publicKey = publicKey
 	a.keyService = w.keyService
 	a.encryptor = w.encryptor
 	a.version = w.encryptor.Version()

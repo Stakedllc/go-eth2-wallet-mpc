@@ -39,11 +39,11 @@ func TestCreateAccount(t *testing.T) {
 	// Start a local HTTP server
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		// Test request METHOD
-		assert.Equal(t, req.Method, "GET")
+		assert.Equal(t, req.Method, "POST")
 		// Test request parameters
-		assert.Equal(t, req.URL.String(), "/address")
+		assert.Equal(t, req.URL.String(), "/keys/")
 		// Send response to be tested
-		rw.Write([]byte(`{"PubKey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"}`))
+		rw.Write([]byte(`{"pk":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"}`))
 	}))
 	// Close the server when test finishes
 	defer server.Close()
@@ -106,6 +106,18 @@ func TestCreateAccount(t *testing.T) {
 }
 
 func TestImportAccount(t *testing.T) {
+	// Start a local HTTP server
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		// Test request METHOD
+		assert.Equal(t, req.Method, "POST")
+		// Test request parameters
+		assert.Equal(t, req.URL.String(), "/keys/")
+		// Send response to be tested
+		rw.Write([]byte(`{"pk":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"}`))
+	}))
+	// Close the server when test finishes
+	defer server.Close()
+
 	tests := []struct {
 		name        string
 		accountName string
@@ -125,7 +137,7 @@ func TestImportAccount(t *testing.T) {
 		},
 		{
 			name:        "Good",
-			key:         _byteArray("a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"),
+			key:         _byteArray("220091d10843519cd1c452a4ec721d378d7d4c5ece81c4b5556092d410e5e0e1"),
 			accountName: "test",
 		},
 		{
@@ -137,11 +149,11 @@ func TestImportAccount(t *testing.T) {
 
 	store := scratch.New()
 	encryptor := keystorev4.New()
-	wallet, err := mpc.CreateWallet("test wallet", store, encryptor, "http://localhost:8080")
+	wallet, err := mpc.CreateWallet("test wallet", store, encryptor, server.URL)
 	require.Nil(t, err)
 
 	// Try to import without unlocking the wallet; should fail
-	_, err = wallet.(types.WalletAccountImporter).ImportAccount("attempt", _byteArray("a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"), []byte("test"))
+	_, err = wallet.(types.WalletAccountImporter).ImportAccount("attempt", _byteArray("220091d10843519cd1c452a4ec721d378d7d4c5ece81c4b5556092d410e5e0e1"), []byte("test"))
 	assert.NotNil(t, err)
 
 	err = wallet.Unlock(nil)
