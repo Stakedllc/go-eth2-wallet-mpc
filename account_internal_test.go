@@ -182,8 +182,6 @@ func TestUnmarshalAccount(t *testing.T) {
 
 func TestUnlock(t *testing.T) {
 	payload := []byte("abcd")
-	pubKeyStr := "88605c6f3226ac5b9d35cea6c2405879dd4f893e15d7effa69df15f24b4869221597f14412b8d8a8cb0b120a90b1197c"
-	pubKeyStrBad := "a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c"
 	signatureStr := "b27173efced932d1e0decdbb872512d4d123835629ffd907211ffe74a86a05dc6be4a8c15f886a48daed4a975f5fffe9153297bcda99adf84b351a8d514ea7f0607ff2e678c1600381fa6beb5fbe1a864924a3e69bb938caeef2de673988265e"
 
 	// Start a local HTTP server
@@ -192,9 +190,7 @@ func TestUnlock(t *testing.T) {
 		assert.Equal(t, req.Method, "POST")
 
 		// Test request parameters
-		endpoint := fmt.Sprintf("/address/%s/sign", pubKeyStr)
-		endpointBad := fmt.Sprintf("/address/%s/sign", pubKeyStrBad)
-		assert.Contains(t, []string{endpoint, endpointBad}, req.URL.String())
+		assert.Contains(t, req.URL.String(), "/sign")
 
 		// Test request payload
 		defer req.Body.Close()

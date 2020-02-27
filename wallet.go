@@ -341,6 +341,9 @@ func (w *wallet) ImportAccount(name string, key []byte, passphrase []byte) (type
 	a.publicKey = privateKey.PublicKey()
 	// Encrypt the private key
 	a.crypto, err = w.encryptor.Encrypt(privateKey.Marshal(), passphrase)
+	if err != nil {
+		return nil, err
+	}
 
 	a.keyService = w.keyService
 	a.encryptor = w.encryptor
