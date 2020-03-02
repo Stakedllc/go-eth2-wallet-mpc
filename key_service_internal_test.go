@@ -59,7 +59,7 @@ func TestNewKeyService(t *testing.T) {
 				assert.Equal(t, test.err.Error(), err.Error())
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, url.String(), output.URL.String())
+				assert.Equal(t, url.String(), output.url.String())
 			}
 		})
 	}

@@ -62,7 +62,7 @@ func (w *wallet) MarshalJSON() ([]byte, error) {
 	data["name"] = w.name
 	data["version"] = w.version
 	data["type"] = walletType
-	data["keyService"] = w.keyService.URL.String()
+	data["keyService"], _ = json.Marshal(w.keyService)
 	return json.Marshal(data)
 }
 
@@ -128,15 +128,12 @@ func (w *wallet) UnmarshalJSON(data []byte) error {
 		return errors.New("wallet version missing")
 	}
 	if val, exists := v["keyService"]; exists {
-		urlStr, ok := val.(string)
+		keyServiceJSON, ok := val.(string)
 		if !ok {
-			return errors.New("wallet keyService invalid")
+			return errors.New("account keyService invalid")
 		}
-		url, err := url.Parse(urlStr)
-		if err != nil {
-			return err
-		}
-		keyService, err := newKeyService(url)
+		var keyService *keyService
+		err := json.Unmarshal([]byte(keyServiceJSON), &keyService)
 		if err != nil {
 			return err
 		}

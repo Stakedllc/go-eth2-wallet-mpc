@@ -19,7 +19,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"sync"
 
 	"github.com/google/uuid"
@@ -60,7 +59,7 @@ func (a *account) MarshalJSON() ([]byte, error) {
 	data["crypto"] = a.crypto
 	data["encryptor"] = a.encryptor.Name()
 	data["version"] = a.version
-	data["keyService"] = a.keyService.URL.String()
+	data["keyService"], _ = json.Marshal(a.keyService)
 	return json.Marshal(data)
 }
 
@@ -146,15 +145,12 @@ func (a *account) UnmarshalJSON(data []byte) error {
 		return errors.New("unsupported keystore version")
 	}
 	if val, exists := v["keyService"]; exists {
-		urlStr, ok := val.(string)
+		keyServiceJSON, ok := val.(string)
 		if !ok {
 			return errors.New("account keyService invalid")
 		}
-		url, err := url.Parse(urlStr)
-		if err != nil {
-			return err
-		}
-		keyService, err := newKeyService(url)
+		var keyService *keyService
+		err := json.Unmarshal([]byte(keyServiceJSON), &keyService)
 		if err != nil {
 			return err
 		}

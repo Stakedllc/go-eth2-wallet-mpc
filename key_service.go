@@ -27,7 +27,9 @@ import (
 )
 
 type keyService struct {
-	URL *url.URL
+	url       *url.URL
+	publicKey etypes.PublicKey
+	version   uint
 }
 
 type publicKeyResponse struct {
@@ -43,6 +45,63 @@ type signResponse struct {
 	Signature string `json:"sign"`
 }
 
+// MarshalJSON implements custom JSON marshaller.
+func (ks *keyService) MarshalJSON() ([]byte, error) {
+	data := make(map[string]interface{})
+	data["pubkey"] = fmt.Sprintf("%x", ks.publicKey.Marshal())
+	data["url"] = ks.url.String()
+	data["version"] = ks.version
+	return json.Marshal(data)
+}
+
+// UnmarshalJSON implements custom JSON unmarshaller.
+func (ks *keyService) UnmarshalJSON(data []byte) error {
+	var v map[string]interface{}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	if val, exists := v["url"]; exists {
+		urlStr, ok := val.(string)
+		if !ok {
+			return errors.New("keyService url invalid")
+		}
+		url, err := url.Parse(urlStr)
+		if err != nil {
+			return err
+		}
+		ks.url = url
+	} else {
+		return errors.New("keyService url missing")
+	}
+	if val, exists := v["pubkey"]; exists {
+		publicKey, ok := val.(string)
+		if !ok {
+			return errors.New("keyService pubkey invalid")
+		}
+		bytes, err := hex.DecodeString(publicKey)
+		if err != nil {
+			return err
+		}
+		ks.publicKey, err = etypes.BLSPublicKeyFromBytes(bytes)
+		if err != nil {
+			return err
+		}
+	} else {
+		return errors.New("keyService pubkey missing")
+	}
+	if val, exists := v["version"]; exists {
+		version, ok := val.(float64)
+		if !ok {
+			return errors.New("keyService version invalid")
+		}
+		ks.version = uint(version)
+	} else {
+		return errors.New("keyService version missing")
+	}
+
+	return nil
+}
+
 // newKeyService creates a new keyService
 func newKeyService(url *url.URL) (*keyService, error) {
 	if !url.IsAbs() {
@@ -50,44 +109,49 @@ func newKeyService(url *url.URL) (*keyService, error) {
 	}
 
 	return &keyService{
-		URL: url,
+		url: url,
 	}, nil
 }
 
 func (ks *keyService) PublicKey() (etypes.PublicKey, error) {
-	url := ks.URL
+	// url := ks.url
 
-	resp, err := http.Get(url.String())
-	if err != nil {
-		return nil, err
-	}
+	// resp, err := http.Get(url.String())
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+	// defer resp.Body.Close()
+	// body, err := ioutil.ReadAll(resp.Body)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	var v publicKeyResponse
-	if err := json.Unmarshal(body, &v); err != nil {
-		return nil, err
-	}
+	// var v publicKeyResponse
+	// if err := json.Unmarshal(body, &v); err != nil {
+	// 	return nil, err
+	// }
 
-	if v.PubKey == "" {
-		return nil, errors.New("missing public key")
-	}
+	// if v.PubKey == "" {
+	// 	return nil, errors.New("missing public key")
+	// }
 
-	bytes, err := hex.DecodeString(v.PubKey)
-	if err != nil {
-		return nil, err
-	}
+	// bytes, err := hex.DecodeString(v.PubKey)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	key, err := etypes.BLSPublicKeyFromBytes(bytes)
-	if err != nil {
-		return nil, err
-	}
+	// remoteKey, err := etypes.BLSPublicKeyFromBytes(bytes)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	return key, nil
+	// return remoteKey, nil
+
+	// Safe to ignore the error as this is already a public key
+	localKeyCopy, _ := etypes.BLSPublicKeyFromBytes(ks.publicKey.Marshal())
+
+	return localKeyCopy, nil
 }
 
 func (ks *keyService) Sign(payload []byte, domain uint64) (etypes.Signature, error) {
@@ -101,8 +165,14 @@ func (ks *keyService) Sign(payload []byte, domain uint64) (etypes.Signature, err
 		return nil, err
 	}
 
-	endpoint := "sign"
-	url, err := ks.URL.Parse(endpoint)
+	pubkey, err := ks.PublicKey()
+	if err != nil {
+		return nil, err
+	}
+	// endpoint := "sign"
+	endpoint := fmt.Sprintf("/%x", pubkey.Marshal())
+
+	url, err := ks.url.Parse(endpoint)
 	if err != nil {
 		return nil, err
 	}
