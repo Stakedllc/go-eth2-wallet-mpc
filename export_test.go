@@ -22,13 +22,13 @@ import (
 	"github.com/stretchr/testify/require"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	scratch "github.com/wealdtech/go-eth2-wallet-store-scratch"
-	types "github.com/wealdtech/go-eth2-wallet-types"
+	wtypes "github.com/wealdtech/go-eth2-wallet-types/v2"
 )
 
 func TestExportWallet(t *testing.T) {
 	store := scratch.New()
 	encryptor := keystorev4.New()
-	wallet, err := mpc.CreateWallet("test wallet", store, encryptor, "http://localhost:8000")
+	wallet, err := mpc.CreateWallet("test wallet", store, encryptor, "http://localhost:8000", _byteArray("868630f2aa3d585ff470d29e17c35ac8c5393317724ea9f842395a061dc68c938ec426c74725242a63797bf517020fa2"))
 	require.Nil(t, err)
 	err = wallet.Unlock([]byte{})
 	require.Nil(t, err)
@@ -38,7 +38,7 @@ func TestExportWallet(t *testing.T) {
 	account2, err := wallet.CreateAccount("Account 2", []byte{})
 	require.Nil(t, err)
 
-	dump, err := wallet.(types.WalletExporter).Export([]byte("dump"))
+	dump, err := wallet.(wtypes.WalletExporter).Export([]byte("dump"))
 	require.Nil(t, err)
 
 	// Import it

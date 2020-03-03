@@ -15,17 +15,19 @@
 package mpc
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	e2types "github.com/wealdtech/go-eth2-types/v2"
 )
 
 func TestUnmarshalAccount(t *testing.T) {
@@ -138,21 +140,6 @@ func TestUnmarshalAccount(t *testing.T) {
 			err:   errors.New(`unsupported keystore version`),
 		},
 		{
-			name:  "MissingKeyService",
-			input: []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c","version":4, "crypto":{"checksum":{"function":"sha256","message":"09b65fda487a021900003a8b2081694b15ca73e0e59a5c79a5126f6818a2f171","params":{}},"cipher":{"function":"aes-128-ctr","message":"8386db98fbe002c02de9bc122b7680078045bf6c5c9ac2f7e8b53afbea0d3e15","params":{"iv":"45092570c625ad5e8decfcd991464740"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"ae6433afd822e6d99dfaa1a0d73d2ee263efdf62f858ba0c422cf27982d09c8a"}}}}`),
-			err:   errors.New(`account keyService missing`),
-		},
-		{
-			name:  "BadKeyService",
-			input: []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c","keyService":"bad","version":4, "crypto":{"checksum":{"function":"sha256","message":"09b65fda487a021900003a8b2081694b15ca73e0e59a5c79a5126f6818a2f171","params":{}},"cipher":{"function":"aes-128-ctr","message":"8386db98fbe002c02de9bc122b7680078045bf6c5c9ac2f7e8b53afbea0d3e15","params":{"iv":"45092570c625ad5e8decfcd991464740"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"ae6433afd822e6d99dfaa1a0d73d2ee263efdf62f858ba0c422cf27982d09c8a"}}}}`),
-			err:   errors.New(`keyService URL 'bad' is not absolute`),
-		},
-		{
-			name:  "BadKeyService2",
-			input: []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c","keyService":"%bad%","version":4, "crypto":{"checksum":{"function":"sha256","message":"09b65fda487a021900003a8b2081694b15ca73e0e59a5c79a5126f6818a2f171","params":{}},"cipher":{"function":"aes-128-ctr","message":"8386db98fbe002c02de9bc122b7680078045bf6c5c9ac2f7e8b53afbea0d3e15","params":{"iv":"45092570c625ad5e8decfcd991464740"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"ae6433afd822e6d99dfaa1a0d73d2ee263efdf62f858ba0c422cf27982d09c8a"}}}}`),
-			err:   errors.New(`parse %bad%: invalid URL escape "%"`),
-		},
-		{
 			name:       "Good",
 			input:      []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c","keyService":"http://localhost:8080","version":4, "crypto":{"checksum":{"function":"sha256","message":"09b65fda487a021900003a8b2081694b15ca73e0e59a5c79a5126f6818a2f171","params":{}},"cipher":{"function":"aes-128-ctr","message":"8386db98fbe002c02de9bc122b7680078045bf6c5c9ac2f7e8b53afbea0d3e15","params":{"iv":"45092570c625ad5e8decfcd991464740"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"ae6433afd822e6d99dfaa1a0d73d2ee263efdf62f858ba0c422cf27982d09c8a"}}}}`),
 			walletType: "multi-party",
@@ -181,73 +168,61 @@ func TestUnmarshalAccount(t *testing.T) {
 }
 
 func TestUnlock(t *testing.T) {
-	payload := []byte("abcd")
-	signatureStr := "b27173efced932d1e0decdbb872512d4d123835629ffd907211ffe74a86a05dc6be4a8c15f886a48daed4a975f5fffe9153297bcda99adf84b351a8d514ea7f0607ff2e678c1600381fa6beb5fbe1a864924a3e69bb938caeef2de673988265e"
+	remoteSignature := _signature("a6df3773e920d6e382298e08f3e5bba17030582b9ae8207c63e87cf72c03694640323c5794c054b4dc530da0c00eaf5d109e004c53f9bbf9c6c7fb1c922ac7f73a1e34b0446fd525d9adbae1df86e1436b9de50f71af99442feb6d453fccbda2")
 
 	// Start a local HTTP server
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		// Test request METHOD
 		assert.Equal(t, req.Method, "POST")
 
-		// Test request parameters
-		assert.Contains(t, req.URL.String(), "/sign")
+		pubKeyStr := strings.TrimPrefix(req.URL.Path, "/")
+		pubKeyBytes, err := hex.DecodeString(pubKeyStr)
+		require.NoError(t, err)
 
-		// Test request payload
-		defer req.Body.Close()
-
-		body, err := ioutil.ReadAll(req.Body)
-		assert.Nil(t, err)
-
-		fmt.Println(body)
-
-		var data signRequest
-		err = json.Unmarshal(body, &data)
-		assert.Nil(t, err)
-
-		fmt.Println(data)
-
-		test, err := json.MarshalIndent(data, "", "  ")
-		assert.Nil(t, err)
-
-		fmt.Println(test)
+		_, err = e2types.BLSPublicKeyFromBytes(pubKeyBytes)
+		require.NoError(t, err)
 
 		// Send response to be tested
-		rw.Write([]byte(fmt.Sprintf(`{"Signature":"%s"}`, signatureStr)))
+		rw.Write([]byte(fmt.Sprintf(`{"sign":"%x"}`, remoteSignature.Marshal())))
 	}))
 	// Close the server when test finishes
 	defer server.Close()
 
-	// serverURL := server.URL
-	serverURL := "http://driver:8000"
+	url := server.URL
 
 	tests := []struct {
 		name       string
 		account    []byte
 		passphrase []byte
+		keyService []byte
 		err        error
 		verified   bool
 	}{
 		{
 			name:       "PublicKeyMismatch",
-			account:    []byte(fmt.Sprintf(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"b89bebc699769726a318c8e9971bd3171297c61aea4a6578a7a4f94b547dcba5bac16a89108b6b6a1fe3695d1a874a0b","keyService":"%s","version":4,"crypto":{"checksum":{"function":"sha256","message":"09b65fda487a021900003a8b2081694b15ca73e0e59a5c79a5126f6818a2f171","params":{}},"cipher":{"function":"aes-128-ctr","message":"8386db98fbe002c02de9bc122b7680078045bf6c5c9ac2f7e8b53afbea0d3e15","params":{"iv":"45092570c625ad5e8decfcd991464740"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"ae6433afd822e6d99dfaa1a0d73d2ee263efdf62f858ba0c422cf27982d09c8a"}}}}`, serverURL)),
+			account:    []byte(fmt.Sprintf(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"b89bebc699769726a318c8e9971bd3171297c61aea4a6578a7a4f94b547dcba5bac16a89108b6b6a1fe3695d1a874a0b","version":4,"crypto":{"checksum":{"function":"sha256","message":"09b65fda487a021900003a8b2081694b15ca73e0e59a5c79a5126f6818a2f171","params":{}},"cipher":{"function":"aes-128-ctr","message":"8386db98fbe002c02de9bc122b7680078045bf6c5c9ac2f7e8b53afbea0d3e15","params":{"iv":"45092570c625ad5e8decfcd991464740"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"ae6433afd822e6d99dfaa1a0d73d2ee263efdf62f858ba0c422cf27982d09c8a"}}}}`)),
 			passphrase: []byte("test passphrase"),
+			keyService: []byte(fmt.Sprintf(`{"url": "%s", "pubkey": "868630f2aa3d585ff470d29e17c35ac8c5393317724ea9f842395a061dc68c938ec426c74725242a63797bf517020fa2", "version": 1}`, url)),
 			err:        errors.New("secret key does not correspond to public key"),
 		},
 		{
 			name:       "Keystore",
-			account:    []byte(fmt.Sprintf(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c","keyService":"%s","version":4,"crypto":{"checksum":{"function":"sha256","message":"09b65fda487a021900003a8b2081694b15ca73e0e59a5c79a5126f6818a2f171","params":{}},"cipher":{"function":"aes-128-ctr","message":"8386db98fbe002c02de9bc122b7680078045bf6c5c9ac2f7e8b53afbea0d3e15","params":{"iv":"45092570c625ad5e8decfcd991464740"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"ae6433afd822e6d99dfaa1a0d73d2ee263efdf62f858ba0c422cf27982d09c8a"}}}}`, serverURL)),
+			account:    []byte(fmt.Sprintf(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c","version":4,"crypto":{"checksum":{"function":"sha256","message":"09b65fda487a021900003a8b2081694b15ca73e0e59a5c79a5126f6818a2f171","params":{}},"cipher":{"function":"aes-128-ctr","message":"8386db98fbe002c02de9bc122b7680078045bf6c5c9ac2f7e8b53afbea0d3e15","params":{"iv":"45092570c625ad5e8decfcd991464740"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"ae6433afd822e6d99dfaa1a0d73d2ee263efdf62f858ba0c422cf27982d09c8a"}}}}`)),
 			passphrase: []byte("test passphrase"),
+			keyService: []byte(fmt.Sprintf(`{"url": "%s", "pubkey": "868630f2aa3d585ff470d29e17c35ac8c5393317724ea9f842395a061dc68c938ec426c74725242a63797bf517020fa2", "version": 1}`, url)),
 		},
 		{
 			name:       "BadPassphrase",
-			account:    []byte(fmt.Sprintf(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c","keyService":"%s","version":4,"crypto":{"checksum":{"function":"sha256","message":"09b65fda487a021900003a8b2081694b15ca73e0e59a5c79a5126f6818a2f171","params":{}},"cipher":{"function":"aes-128-ctr","message":"8386db98fbe002c02de9bc122b7680078045bf6c5c9ac2f7e8b53afbea0d3e15","params":{"iv":"45092570c625ad5e8decfcd991464740"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"ae6433afd822e6d99dfaa1a0d73d2ee263efdf62f858ba0c422cf27982d09c8a"}}}}`, serverURL)),
+			account:    []byte(fmt.Sprintf(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c","version":4,"crypto":{"checksum":{"function":"sha256","message":"09b65fda487a021900003a8b2081694b15ca73e0e59a5c79a5126f6818a2f171","params":{}},"cipher":{"function":"aes-128-ctr","message":"8386db98fbe002c02de9bc122b7680078045bf6c5c9ac2f7e8b53afbea0d3e15","params":{"iv":"45092570c625ad5e8decfcd991464740"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"ae6433afd822e6d99dfaa1a0d73d2ee263efdf62f858ba0c422cf27982d09c8a"}}}}`)),
 			passphrase: []byte("wrong passphrase"),
+			keyService: []byte(fmt.Sprintf(`{"url": "%s", "pubkey": "868630f2aa3d585ff470d29e17c35ac8c5393317724ea9f842395a061dc68c938ec426c74725242a63797bf517020fa2", "version": 1}`, url)),
 			err:        errors.New("incorrect passphrase"),
 		},
 		{
 			name:       "EmptyPassphrase",
-			account:    []byte(fmt.Sprintf(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c","keyService":"%s","version":4,"crypto":{"checksum":{"function":"sha256","message":"4a67cc6a4ff5e81235393c677652213cc96488d68f17d045f99f9cef8acc81a1","params":{}},"cipher":{"function":"aes-128-ctr","message":"ce7c1d11cd71adb604c055a2d198336387e0579275c4d2d45c184ed54631ebdd","params":{"iv":"c752efc43ca0651bb06adccf4b8651b8"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"b49107e74e59a80ce5ac1624e6d27e7305aa22f5ffba4f602dd4dfe34fdf8640"}}}}`, serverURL)),
+			account:    []byte(fmt.Sprintf(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"test account","pubkey":"a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c","version":4,"crypto":{"checksum":{"function":"sha256","message":"4a67cc6a4ff5e81235393c677652213cc96488d68f17d045f99f9cef8acc81a1","params":{}},"cipher":{"function":"aes-128-ctr","message":"ce7c1d11cd71adb604c055a2d198336387e0579275c4d2d45c184ed54631ebdd","params":{"iv":"c752efc43ca0651bb06adccf4b8651b8"}},"kdf":{"function":"pbkdf2","message":"","params":{"c":16,"dklen":32,"prf":"hmac-sha256","salt":"b49107e74e59a80ce5ac1624e6d27e7305aa22f5ffba4f602dd4dfe34fdf8640"}}}}`)),
 			passphrase: []byte(""),
+			keyService: []byte(fmt.Sprintf(`{"url": "%s", "pubkey": "868630f2aa3d585ff470d29e17c35ac8c5393317724ea9f842395a061dc68c938ec426c74725242a63797bf517020fa2", "version": 1}`, url)),
 		},
 	}
 
@@ -257,8 +232,12 @@ func TestUnlock(t *testing.T) {
 			err := json.Unmarshal(test.account, account)
 			require.NoError(t, err)
 
+			account.keyService = newKeyService()
+			err = json.Unmarshal(test.keyService, account.keyService)
+			require.NoError(t, err)
+
 			// Try to sign something - should fail because locked
-			_, err = account.Sign(payload, 0)
+			_, err = account.Sign([]byte("test"))
 			assert.Error(t, err)
 
 			err = account.Unlock(test.passphrase)
@@ -269,16 +248,16 @@ func TestUnlock(t *testing.T) {
 				require.NoError(t, err)
 
 				// Try to sign something - should succeed because unlocked
-				signature, err := account.Sign(payload, 0)
+				signature, err := account.Sign([]byte("test"))
 				require.NoError(t, err)
 
-				verified := signature.Verify(payload, account.PublicKey(), 0)
+				verified := signature.Verify([]byte("test"), account.PublicKey())
 				assert.Equal(t, true, verified)
 
 				account.Lock()
 
 				// Try to sign something - should fail because locked (again)
-				_, err = account.Sign(payload, 0)
+				_, err = account.Sign([]byte("test"))
 				assert.Error(t, err)
 			}
 		})

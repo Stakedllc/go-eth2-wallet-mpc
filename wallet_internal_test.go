@@ -108,8 +108,23 @@ func TestUnmarshalWallet(t *testing.T) {
 			err:   errors.New("wallet version invalid"),
 		},
 		{
+			name:  "MissingKeyService",
+			input: []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"Good","type":"multi-party","version":1}`),
+			err:   errors.New(`wallet keyService missing`),
+		},
+		{
+			name:  "BadKeyService",
+			input: []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"Good","type":"multi-party","keyService":{},"version":1}`),
+			err:   errors.New(`keyService url missing`),
+		},
+		{
+			name:  "BadKeyService2",
+			input: []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"Good","type":"multi-party","keyService":"bad","version":1}`),
+			err:   errors.New(`json: cannot unmarshal string into Go value of type map[string]interface {}`),
+		},
+		{
 			name:       "Good",
-			input:      []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"Good","type":"multi-party","keyService":"http://localhost:8080","version":1}`),
+			input:      []byte(`{"uuid":"c9958061-63d4-4a80-bcf3-25f3dda22340","name":"Good","type":"multi-party","keyService": {"url": "http://localhost:8000", "pubkey": "a99a76ed7796f7be22d5b7e85deeb7c5677e88e511e0b337618f8c4eb61349b4bf2d153f649f7b53359fe8b94a38e44c", "version": 1},"version":1}`),
 			walletType: "multi-party",
 			id:         uuid.MustParse("c9958061-63d4-4a80-bcf3-25f3dda22340"),
 			version:    1,
@@ -121,10 +136,10 @@ func TestUnmarshalWallet(t *testing.T) {
 			output := newWallet()
 			err := json.Unmarshal(test.input, output)
 			if test.err != nil {
-				require.NotNil(t, err)
+				require.Error(t, err)
 				assert.Equal(t, test.err.Error(), err.Error())
 			} else {
-				require.Nil(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, test.id, output.ID())
 				assert.Equal(t, test.version, output.Version())
 				assert.Equal(t, test.walletType, output.Type())

@@ -23,12 +23,12 @@ import (
 	"net/url"
 
 	"github.com/pkg/errors"
-	etypes "github.com/wealdtech/go-eth2-types"
+	e2types "github.com/wealdtech/go-eth2-types/v2"
 )
 
 type keyService struct {
 	url       *url.URL
-	publicKey etypes.PublicKey
+	publicKey e2types.PublicKey
 	version   uint
 }
 
@@ -38,7 +38,6 @@ type publicKeyResponse struct {
 
 type signRequest struct {
 	Payload string `json:"payload"`
-	Domain  uint64 `json:"domain"`
 }
 
 type signResponse struct {
@@ -82,7 +81,7 @@ func (ks *keyService) UnmarshalJSON(data []byte) error {
 		if err != nil {
 			return err
 		}
-		ks.publicKey, err = etypes.BLSPublicKeyFromBytes(bytes)
+		ks.publicKey, err = e2types.BLSPublicKeyFromBytes(bytes)
 		if err != nil {
 			return err
 		}
@@ -102,18 +101,12 @@ func (ks *keyService) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// newKeyService creates a new keyService
-func newKeyService(url *url.URL) (*keyService, error) {
-	if !url.IsAbs() {
-		return nil, fmt.Errorf("keyService URL '%s' is not absolute", url)
-	}
-
-	return &keyService{
-		url: url,
-	}, nil
+func newKeyService() *keyService {
+	return &keyService{}
 }
 
-func (ks *keyService) PublicKey() (etypes.PublicKey, error) {
+// PublicKey returns the remote public key
+func (ks *keyService) PublicKey() (e2types.PublicKey, error) {
 	// url := ks.url
 
 	// resp, err := http.Get(url.String())
@@ -141,23 +134,25 @@ func (ks *keyService) PublicKey() (etypes.PublicKey, error) {
 	// 	return nil, err
 	// }
 
-	// remoteKey, err := etypes.BLSPublicKeyFromBytes(bytes)
+	// remoteKey, err := e2types.BLSPublicKeyFromBytes(bytes)
 	// if err != nil {
 	// 	return nil, err
 	// }
 
 	// return remoteKey, nil
 
-	// Safe to ignore the error as this is already a public key
-	localKeyCopy, _ := etypes.BLSPublicKeyFromBytes(ks.publicKey.Marshal())
-
-	return localKeyCopy, nil
+	return ks.publicKey.Copy(), nil
 }
 
-func (ks *keyService) Sign(payload []byte, domain uint64) (etypes.Signature, error) {
+// PrivateKey remote KeyServices do not support PrivateKey access
+func (ks *keyService) PrivateKey() (e2types.PrivateKey, error) {
+	return nil, errors.New("keyService does not support PrivateKey access")
+}
+
+// Sign signs the payload using the remote signing service
+func (ks *keyService) Sign(payload []byte) (e2types.Signature, error) {
 	r := &signRequest{
-		Payload: fmt.Sprintf("%s", payload),
-		Domain:  domain,
+		Payload: fmt.Sprintf("%x", payload),
 	}
 
 	data, err := json.Marshal(r)
@@ -202,7 +197,7 @@ func (ks *keyService) Sign(payload []byte, domain uint64) (etypes.Signature, err
 		return nil, err
 	}
 
-	signature, err := etypes.BLSSignatureFromBytes(bytes)
+	signature, err := e2types.BLSSignatureFromBytes(bytes)
 	if err != nil {
 		return nil, err
 	}
