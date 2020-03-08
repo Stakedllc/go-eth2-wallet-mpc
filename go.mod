@@ -12,5 +12,5 @@ require (
 	github.com/wealdtech/go-eth2-wallet-store-scratch v1.3.0
 	github.com/wealdtech/go-eth2-wallet-types/v2 v2.0.0
 	github.com/wealdtech/go-indexer v1.0.0
-	golang.org/x/crypto v0.0.0-20200208060501-ecb85df21340 // indirect
+	golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d // indirect
 )

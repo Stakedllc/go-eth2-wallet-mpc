@@ -17,7 +17,7 @@ package mpc_test
 import (
 	"testing"
 
-	mpc "github.com/Stakedllc/go-eth2-wallet-mpc"
+	mpc "github.com/Stakedllc/go-eth2-wallet-mpc/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"

@@ -18,7 +18,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	mpc "github.com/Stakedllc/go-eth2-wallet-mpc"
+	mpc "github.com/Stakedllc/go-eth2-wallet-mpc/v2"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
