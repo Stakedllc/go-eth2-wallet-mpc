@@ -32,10 +32,6 @@ type keyService struct {
 	version   uint
 }
 
-type publicKeyResponse struct {
-	PubKey string `json:"pk"`
-}
-
 type signRequest struct {
 	Payload string `json:"payload"`
 }
@@ -107,40 +103,6 @@ func newKeyService() *keyService {
 
 // PublicKey returns the remote public key
 func (ks *keyService) PublicKey() (e2types.PublicKey, error) {
-	// url := ks.url
-
-	// resp, err := http.Get(url.String())
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// defer resp.Body.Close()
-	// body, err := ioutil.ReadAll(resp.Body)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// var v publicKeyResponse
-	// if err := json.Unmarshal(body, &v); err != nil {
-	// 	return nil, err
-	// }
-
-	// if v.PubKey == "" {
-	// 	return nil, errors.New("missing public key")
-	// }
-
-	// bytes, err := hex.DecodeString(v.PubKey)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// remoteKey, err := e2types.BLSPublicKeyFromBytes(bytes)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// return remoteKey, nil
-
 	return ks.publicKey.Copy(), nil
 }
 
@@ -164,9 +126,8 @@ func (ks *keyService) Sign(payload []byte) (e2types.Signature, error) {
 	if err != nil {
 		return nil, err
 	}
-	// endpoint := "sign"
-	endpoint := fmt.Sprintf("/%x", pubkey.Marshal())
 
+	endpoint := fmt.Sprintf("/%x", pubkey.Marshal())
 	url, err := ks.url.Parse(endpoint)
 	if err != nil {
 		return nil, err
